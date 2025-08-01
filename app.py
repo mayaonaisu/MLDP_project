@@ -302,7 +302,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Add gap between description and patient input box
 st.markdown("<div style='height:2.5rem;'></div>", unsafe_allow_html=True)
 
 # ─── 2) Load model ────────────────────────────────────────────────────────────
