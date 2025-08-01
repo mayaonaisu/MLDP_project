@@ -307,8 +307,18 @@ st.markdown("<div style='height:2.5rem;'></div>", unsafe_allow_html=True)
 # ─── 2) Load model ────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_model(path="diabetes_model_calibrated.pkl"):
-    return joblib.load(path)
+    try:
+        return joblib.load(path)
+    except FileNotFoundError:
+        st.error(f"Model file not found at `{path}`. Please check your repo.")
+        return None
+    except Exception as e:
+        st.error(f"Unexpected error loading model: {e}")
+        return None
+
 model = load_model()
+if model is None:
+    st.stop()
 
 # ─── 3) Patient Information Form ─────────────────────────────────────────────
 with st.form("patient_form"):
@@ -325,8 +335,8 @@ with st.form("patient_form"):
     """, unsafe_allow_html=True)
     cols = st.columns(2)
     with cols[0]:
-        st.markdown("<span class='input-label'>Age (years) 📆</span>", unsafe_allow_html=True)
-        age = st.number_input("Age (years) 📆", 0, 120, 50, label_visibility="collapsed")
+        st.markdown("<span class='input-label'>Age (years) 📆 (Max 120.00)</span>", unsafe_allow_html=True)
+        age = st.number_input("Age (years) 📆 (Max 120.00)", 0, 120, 50, label_visibility="collapsed")
         st.markdown("<span class='input-label'>Gender ♀️♂️</span>", unsafe_allow_html=True)
         gender = st.selectbox("Gender ♀️♂️", ["Male", "Female", "Other"], label_visibility="collapsed")
         st.markdown("<span class='input-label'>History of hypertension?</span>", unsafe_allow_html=True)
@@ -336,14 +346,14 @@ with st.form("patient_form"):
         st.markdown("<span class='input-label'>Smoking history 🚬</span>", unsafe_allow_html=True)
         smoking_history = st.selectbox("Smoking history 🚬", ["never","former","current","not current"], label_visibility="collapsed")
     with cols[1]:
-        st.markdown("<span class='input-label'>Height (cm) 📏</span>", unsafe_allow_html=True)
-        height_cm = st.number_input("Height (cm) 📏", 50.0, 250.0, 170.0, step=0.5, label_visibility="collapsed")
-        st.markdown("<span class='input-label'>Weight (kg) ⚖️</span>", unsafe_allow_html=True)
-        weight_kg = st.number_input("Weight (kg) ⚖️", 20.0, 200.0, 70.0, step=0.5, label_visibility="collapsed")
+        st.markdown("<span class='input-label'>Height (cm) 📏 (Max 250.00)</span>", unsafe_allow_html=True)
+        height_cm = st.number_input("Height (cm) 📏 (Max 250.00)", 50.0, 250.0, 170.0, step=0.5, label_visibility="collapsed")
+        st.markdown("<span class='input-label'>Weight (kg) ⚖️ (Max 200.00)</span>", unsafe_allow_html=True)
+        weight_kg = st.number_input("Weight (kg) ⚖️ (Max 200.00)", 20.0, 200.0, 70.0, step=0.5, label_visibility="collapsed")
         height_m = height_cm / 100.0
         bmi = weight_kg / (height_m**2)
         st.markdown(f"**Calculated BMI:** {bmi:.1f}", unsafe_allow_html=True)
-        st.markdown("<span class='input-label'>A1c (Glycated Hemoglobin) % 🧂</span>", unsafe_allow_html=True)
+        st.markdown("<span class='input-label'>A1c (Glycated Hemoglobin) % 🧂 (Max 15.00)</span>", unsafe_allow_html=True)
         hba1c = st.number_input(
             "A1c (Glycated Hemoglobin) % ",
             3.0, 15.0, 6.0, step=0.1,
@@ -352,13 +362,25 @@ with st.form("patient_form"):
         )
         st.caption("Reflects your average blood glucose over the last 2–3 months.")
         st.markdown("<div style='height:1.5rem;'></div>", unsafe_allow_html=True)
-        st.markdown("<span class='input-label'>Blood glucose (mg/dL) 🩸</span>", unsafe_allow_html=True)
-        glucose = st.number_input("Blood glucose (mg/dL) 🩸", 50.0, 300.0, 100.0, label_visibility="collapsed")
+        st.markdown("<span class='input-label'>Blood glucose (mg/dL) 🩸 (Max 300.00)</span>", unsafe_allow_html=True)
+        glucose = st.number_input("Blood glucose (mg/dL) 🩸 (Max 300.00)", 50.0, 300.0, 100.0, label_visibility="collapsed")
     submitted = st.form_submit_button("🔬 Submit")
 
 # ─── 4) Prediction Results ───────────────────────────────────────────────────
 if submitted:
-    df = pd.DataFrame([{
+    
+  for field, val in [
+        ("Age", age),
+        ("Height", height_cm),
+        ("Weight", weight_kg),
+        ("A1c", hba1c),
+        ("Glucose", glucose)
+    ]:
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+            st.error(f"{field} is missing or invalid. Please enter a valid value.")
+            st.stop()
+
+  df = pd.DataFrame([{
         "age": age,
         "gender": gender,
         "hypertension": int(hypertension=="Yes"),
@@ -369,51 +391,54 @@ if submitted:
         "blood_glucose_level": glucose
     }])
 
-    def engineer(d):
-        d = d.copy()
-        d["log_glucose"]  = np.log1p(d["blood_glucose_level"])
-        d["log_bmi"]      = np.log1p(d["bmi"])
-        d["age_squared"]  = d["age"]**2
-        d["bmi_squared"]  = d["bmi"]**2
-        d["age_bmi_interaction"]     = d["age"]*d["bmi"]
-        d["bmi_glucose_interaction"] = d["bmi"]*d["blood_glucose_level"]
-        d["glucose_hba1c_ratio"]     = d["blood_glucose_level"]/d["HbA1c_level"]
-        d["high_glucose_flag"] = (d["blood_glucose_level"]>125).astype(int)
-        d["high_hba1c_flag"]   = (d["HbA1c_level"]>5.7).astype(int)
-        d["obese_flag"]        = (d["bmi"]>=30).astype(int)
-        Y,M = 30,60
-        d["age_bin_old"]    = (d["age"]>M).astype(int)
-        d["age_bin_middle"] = ((d["age"]>Y)&(d["age"]<=M)).astype(int)
-        def map_risk(r):
-            if r.obese_flag and r.high_glucose_flag: return 2
-            if r.obese_flag or r.high_glucose_flag:  return 1
-            return 0
-        d["risk_group"] = d.apply(map_risk, axis=1)
-        return d
+  def engineer(d):
+      d = d.copy()
+      d["log_glucose"]  = np.log1p(d["blood_glucose_level"])
+      d["log_bmi"]      = np.log1p(d["bmi"])
+      d["age_squared"]  = d["age"]**2
+      d["bmi_squared"]  = d["bmi"]**2
+      d["age_bmi_interaction"]     = d["age"]*d["bmi"]
+      d["bmi_glucose_interaction"] = d["bmi"]*d["blood_glucose_level"]
+      d["glucose_hba1c_ratio"]     = d["blood_glucose_level"]/d["HbA1c_level"]
+      d["high_glucose_flag"] = (d["blood_glucose_level"]>125).astype(int)
+      d["high_hba1c_flag"]   = (d["HbA1c_level"]>5.7).astype(int)
+      d["obese_flag"]        = (d["bmi"]>=30).astype(int)
+      Y,M = 30,60
+      d["age_bin_old"]    = (d["age"]>M).astype(int)
+      d["age_bin_middle"] = ((d["age"]>Y)&(d["age"]<=M)).astype(int)
+      def map_risk(r):
+          if r.obese_flag and r.high_glucose_flag: return 2
+          if r.obese_flag or r.high_glucose_flag:  return 1
+          return 0
+      d["risk_group"] = d.apply(map_risk, axis=1)
+      return d
+  try:
+      df_eng = engineer(df)
+      prob   = model.predict_proba(df_eng)[0,1]
+      pred   = int(prob >= 0.5)
+  except Exception as e:
+      st.error(f"An error occurred during prediction: {e}")
+      st.stop()
 
-    df_eng = engineer(df)
-    prob   = model.predict_proba(df_eng)[0,1]
-    pred   = int(prob>=0.5)
+  st.markdown('<div class="card">', unsafe_allow_html=True)
+  st.markdown('<h3>Prediction Results</h3>', unsafe_allow_html=True)
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<h3>Prediction Results</h3>', unsafe_allow_html=True)
+  cols = st.columns(3, gap="large")
+  with cols[0]:
+      st.markdown(f'<div class="metric-card"><h4>Probability</h4><h2>{prob:.1%}</h2></div>', unsafe_allow_html=True)
+  with cols[1]:
+      lbl = "Diabetic" if pred else "Non-diabetic"
+      st.markdown(f'<div class="metric-card"><h4>Classification</h4><h2>{lbl}</h2></div>', unsafe_allow_html=True)
+  with cols[2]:
+      lvl = "High" if prob>=0.75 else "Moderate" if prob>=0.40 else "Low"
+      st.markdown(f'<div class="metric-card"><h4>Risk Level</h4><h2>{lvl}</h2></div>', unsafe_allow_html=True)
 
-    cols = st.columns(3, gap="large")
-    with cols[0]:
-        st.markdown(f'<div class="metric-card"><h4>Probability</h4><h2>{prob:.1%}</h2></div>', unsafe_allow_html=True)
-    with cols[1]:
-        lbl = "Diabetic" if pred else "Non-diabetic"
-        st.markdown(f'<div class="metric-card"><h4>Classification</h4><h2>{lbl}</h2></div>', unsafe_allow_html=True)
-    with cols[2]:
-        lvl = "High" if prob>=0.75 else "Moderate" if prob>=0.40 else "Low"
-        st.markdown(f'<div class="metric-card"><h4>Risk Level</h4><h2>{lvl}</h2></div>', unsafe_allow_html=True)
-
-    a,m,b = st.columns([1,2,1], gap="small")
-    with m:
-        if prob>=0.75:
-            st.error("🚨 High risk! Please visit your doctor right away.")
-        elif prob>=0.40:
-            st.warning("⚠️ Moderate risk. Consider scheduling a check-up.")
-        else:
-            st.success("✅ Low risk. Keep up the healthy habits!")
-    st.markdown('</div>', unsafe_allow_html=True)
+  a,m,b = st.columns([1,2,1], gap="small")
+  with m:
+      if prob>=0.75:
+          st.error("🚨 High risk! Please visit your doctor right away.")
+      elif prob>=0.40:
+          st.warning("⚠️ Moderate risk. Consider scheduling a check-up.")
+      else:
+          st.success("✅ Low risk. Keep up the healthy habits!")
+  st.markdown('</div>', unsafe_allow_html=True)
