@@ -335,8 +335,8 @@ with st.form("patient_form"):
     """, unsafe_allow_html=True)
     cols = st.columns(2)
     with cols[0]:
-        st.markdown("<span class='input-label'>Age (years) 📆 (Max 120.00)</span>", unsafe_allow_html=True)
-        age = st.number_input("Age (years) 📆 (Max 120.00)", 0, 120, 50, label_visibility="collapsed")
+        st.markdown("<span class='input-label'>Age (years) 📆 (Max 120)</span>", unsafe_allow_html=True)
+        age = st.number_input("Age (years) 📆 (Max 120)", 0, 120, 50, label_visibility="collapsed")
         st.markdown("<span class='input-label'>Gender ♀️♂️</span>", unsafe_allow_html=True)
         gender = st.selectbox("Gender ♀️♂️", ["Male", "Female", "Other"], label_visibility="collapsed")
         st.markdown("<span class='input-label'>History of hypertension?</span>", unsafe_allow_html=True)
