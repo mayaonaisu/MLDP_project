@@ -418,13 +418,3 @@ if submitted:
         else:
             st.success("✅ Low risk. Keep up the healthy habits!")
     st.markdown('</div>', unsafe_allow_html=True)
-
-# ─── 5) Footer ───────────────────────────────────────────────────────────────
-st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown(
-    '<p style="text-align:center;color:gray; max-width:900px; margin:auto;">'
-    'Built with ❤️ by *Your Name*. '
-    '<a href="https://github.com/your-username/diabetes_app" target="_blank">GitHub</a>'
-    '</p>',
-    unsafe_allow_html=True
-)
